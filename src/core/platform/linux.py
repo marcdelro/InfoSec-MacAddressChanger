@@ -92,9 +92,23 @@ class LinuxAdapter(PlatformAdapter):
         # Interface must be brought down by the caller before this is invoked.
         try:
             code, out, err = _run("ip", "link", "set", interface, "address", mac)
+            if code == 0:
+                return AdapterResult(success=True, message=f"MAC set to {mac} (via ip)")
+        except FileNotFoundError:
+            pass  # iproute2 not available — fall through to ifconfig
+
+        # Fallback for older distros without iproute2.
+        try:
+            code, out, err = _run("ifconfig", interface, "hw", "ether", mac)
             if code != 0:
                 return AdapterResult(success=False, error_code="SET_MAC_FAILED", message=err.strip())
-            return AdapterResult(success=True, message=f"MAC set to {mac}")
+            return AdapterResult(success=True, message=f"MAC set to {mac} (via ifconfig)")
+        except FileNotFoundError:
+            return AdapterResult(
+                success=False,
+                error_code="NO_TOOL_AVAILABLE",
+                message="Neither 'ip' (iproute2) nor 'ifconfig' (net-tools) is available",
+            )
         except Exception as exc:
             return AdapterResult(success=False, error_code="UNEXPECTED", message=str(exc))
 
